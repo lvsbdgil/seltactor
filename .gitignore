@@ -10,3 +10,6 @@ playwright-report/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# Local credential source
+/key

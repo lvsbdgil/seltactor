@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import base64
 import io
 import json
@@ -15,6 +16,14 @@ from backend import app as api
 from backend import pipeline
 
 
+@contextmanager
+def admin_client():
+    with TestClient(api.app) as client:
+        response = client.post('/api/auth/login', json={'username':'admin','password':'test-admin-password-not-real'})
+        assert response.status_code == 200
+        yield client
+
+
 def png():
     out = io.BytesIO()
     Image.new('RGB', (100, 80), '#6d8a4f').save(out, format='PNG')
@@ -28,7 +37,7 @@ def isolated(monkeypatch):
 
 
 def test_no_key_and_health():
-    with TestClient(api.app) as client:
+    with admin_client() as client:
         assert client.get('/api/health').json()['configured'] is False
         res = client.post('/api/analyses', data={'field': 'Поле', 'crop': 'Пшеница', 'date': '2026-05-18'},
                           files={'files': ('test.png', png(), 'image/png')})
@@ -44,7 +53,7 @@ def test_upload_process_poll_and_cleanup(monkeypatch):
         observed.append(context)
         return {'summary': 'Наблюдение', 'observations': [], 'limitations': [], 'mode': 'openai'}
     with patch.object(api, 'analyze_images', side_effect=analyze), patch.object(api.shutil, 'rmtree', wraps=api.shutil.rmtree) as cleanup:
-        with TestClient(api.app) as client:
+        with admin_client() as client:
             res = client.post('/api/analyses', data={'field': 'Поле №12', 'crop': 'Пшеница', 'date': '2026-05-18'},
                               files={'files': ('../../test.png', png(), 'image/png')})
             assert res.status_code == 202
@@ -59,7 +68,7 @@ def test_upload_process_poll_and_cleanup(monkeypatch):
 
 def test_invalid_images_and_unknown_job(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key-not-real')
-    with TestClient(api.app) as client:
+    with admin_client() as client:
         data = {'field': 'Поле', 'crop': 'Пшеница', 'date': '2026-05-18'}
         assert client.post('/api/analyses', data=data, files={'files': ('bad.jpg', b'not-an-image', 'image/jpeg')}).status_code == 415
         assert client.post('/api/analyses', data=data, files={'files': ('bad.png', b'', 'image/png')}).status_code == 422
@@ -70,7 +79,7 @@ def test_invalid_images_and_unknown_job(monkeypatch):
 def test_failed_job_is_safe(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key-not-real')
     with patch.object(api, 'analyze_images', side_effect=RuntimeError('secret-key-never-expose')):
-        with TestClient(api.app) as client:
+        with admin_client() as client:
             res = client.post('/api/analyses', data={'field': 'P', 'crop': 'C', 'date': '2026-05-18'}, files={'files': ('x.png', png())})
             job = client.get('/api/analyses/' + res.json()['id']).json()
             assert job['status'] == 'failed'
@@ -128,10 +137,28 @@ def test_real_sdk_payload_structured_response(monkeypatch):
 def test_limits_and_cors(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key-not-real')
     data = {'field': 'Поле', 'crop': 'Пшеница', 'date': '2026-05-18'}
-    with TestClient(api.app) as client:
+    with admin_client() as client:
         assert client.post('/api/analyses', data=data,
             files=[('files', (f'{i}.png', png(), 'image/png')) for i in range(13)]).status_code == 413
         monkeypatch.setattr(api, 'MAX_PHOTO_BYTES', 10)
         assert client.post('/api/analyses', data=data, files={'files': ('x.png', png())}).status_code == 413
         cors = client.options('/api/analyses', headers={'Origin': 'http://localhost:5173', 'Access-Control-Request-Method': 'POST'})
         assert cors.headers['access-control-allow-origin'] == 'http://localhost:5173'
+
+
+@pytest.mark.parametrize('code,error_type,expected', [
+    ('credit_balance_exhausted', 'insufficient_quota', 'Баланс OpenAI API исчерпан'),
+    ('rate_limit_exceeded', 'requests', 'лимит частоты запросов'),
+])
+def test_openai_quota_and_rate_limit_are_distinct(monkeypatch, code, error_type, expected):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key-not-real')
+    def handler(request):
+        return httpx.Response(429, json={'error': {'message': 'Test error', 'type': error_type, 'code': code}})
+    real_openai = pipeline.OpenAI
+    def factory(**kwargs):
+        kwargs['max_retries'] = 0
+        return real_openai(**kwargs, http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    with patch.object(pipeline, 'OpenAI', side_effect=factory):
+        with pytest.raises(pipeline.PipelineError, match=expected):
+            pipeline.analyze_images([pipeline.PreparedImage('S01', 'sample.png', pipeline.normalize_image(png()))],
+                                    field='Поле', crop='Пшеница', date='2026-05-18', model='gpt-5.6-terra')

@@ -198,7 +198,9 @@ def analyze_images(images: list[PreparedImage], *, field: str, crop: str, date: 
     except AuthenticationError as exc:
         raise PipelineError("OpenAI отклонил API-ключ. Проверьте OPENAI_API_KEY на сервере.") from exc
     except RateLimitError as exc:
-        raise PipelineError("Превышен лимит OpenAI или закончились API-кредиты. Проверьте billing и повторите позже.") from exc
+        if exc.code in {"insufficient_quota", "credit_balance_exhausted"} or exc.type == "insufficient_quota":
+            raise PipelineError("Баланс OpenAI API исчерпан. Пополните баланс API-проекта, затем повторите анализ.") from exc
+        raise PipelineError("Превышен лимит частоты запросов OpenAI. Подождите и повторите анализ.") from exc
     except APIConnectionError as exc:
         raise PipelineError("Не удалось подключиться к OpenAI. Проверьте интернет и повторите анализ.") from exc
     except APIStatusError as exc:

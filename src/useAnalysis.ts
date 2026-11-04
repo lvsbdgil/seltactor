@@ -11,11 +11,11 @@ export function useAnalysis(){
   try{
    const data=new FormData();files.forEach(f=>data.append('files',f));data.append('field',field);data.append('crop',crop);data.append('date',date);
    const res=await fetch('/api/analyses',{method:'POST',body:data,signal:abort.signal});
-   if(!res.ok){let message='Не удалось начать анализ. Проверьте доступность сервиса.';try{const body=await res.json();if(typeof body.detail==='string')message=body.detail}catch{}throw Error(message)}
+   if(!res.ok){if(res.status===401)window.dispatchEvent(new Event('seltactor:session-expired'));let message='Не удалось начать анализ. Проверьте доступность сервиса.';try{const body=await res.json();if(typeof body.detail==='string')message=body.detail}catch{}throw Error(message)}
    let current:Job=await res.json();setConfigured(true);setJob(current);setUploading(false);
    while(current.status==='queued'||current.status==='processing'){
     await new Promise<void>((resolve,reject)=>{const onAbort=()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'))};const timer=setTimeout(()=>{abort.signal.removeEventListener('abort',onAbort);resolve()},900);abort.signal.addEventListener('abort',onAbort,{once:true});if(abort.signal.aborted)onAbort()});
-    const response=await fetch('/api/analyses/'+encodeURIComponent(current.id),{signal:abort.signal});if(!response.ok)throw Error('Не удалось получить результат. Попробуйте повторить обследование.');current=await response.json();setJob(current);
+    const response=await fetch('/api/analyses/'+encodeURIComponent(current.id),{signal:abort.signal});if(response.status===401)window.dispatchEvent(new Event('seltactor:session-expired'));if(!response.ok)throw Error('Не удалось получить результат. Попробуйте повторить обследование.');current=await response.json();setJob(current);
    }
    if(current.status==='failed')throw Error(current.error||'Не удалось обработать материалы. Попробуйте другие файлы.');
   }catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Сервис анализа недоступен.')}

@@ -11,8 +11,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from . import auth
 from PIL import Image
 
 from .pipeline import (
@@ -34,6 +36,25 @@ limits = {"max_files": MAX_FILES, "max_file_bytes": MAX_FILE_BYTES, "max_photo_b
 app = FastAPI(title="SELTACTOR analysis API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+app.include_router(auth.router)
+
+
+@app.middleware("http")
+async def admin_boundary(request: Request, call_next):
+    # Enforce before multipart parsing, including malformed/large guest uploads.
+    try:
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+            auth.check_origin(request)
+        if request.method != "OPTIONS" and request.url.path.startswith("/api/analyses"):
+            auth.require_admin(request)
+    except HTTPException as exc:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers={**(exc.headers or {}), "Cache-Control": "no-store"})
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 jobs: dict[str, dict] = {}
 lock = threading.RLock()
 workers = threading.Semaphore(2)
@@ -58,8 +79,8 @@ def public_job(job: dict) -> dict:
 
 
 @app.get("/api/health")
-def health():
-    return {"status": "ok", "configured": configured(), "model": MODEL,
+def health(request: Request):
+    return {"status": "ok", "configured": configured(), "is_admin": auth.current_admin(request) is not None, "model": MODEL,
             "ffmpeg_available": bool(shutil.which("ffmpeg") and shutil.which("ffprobe")), "limits": limits}
 
 

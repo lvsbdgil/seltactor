@@ -6,6 +6,7 @@ const page=await browser.newPage({viewport:{width:1440,height:1050}});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const report={summary:'На снимке виден участок с неоднородной окраской растительности.',observations:[{id:'one',label:'Неоднородность окраски',severity:'medium',description:'Наблюдение тестовой модели, не агрономический диагноз.',recommendation:'Проверить участок при наземном осмотре.',source:'real-test.png'}],limitations:['По одному снимку нельзя установить причину изменения окраски.'],disclaimer:'Выводы требуют проверки агрономом.',model:'test-vision',field:'Поле № 12 · Северное',crop:'Озимая пшеница',date:'2026-05-18',images_analyzed:1,files_processed:1,mode:'openai'};
 let polls=0;
+await page.route('**/api/auth/me',route=>route.fulfill({json:{is_admin:true,username:'test-admin'}}));
 await page.route('**/api/health',route=>route.fulfill({json:{configured:true,model:'test-vision'}}));
 await page.route('**/api/analyses',async route=>{const body=route.request().postDataBuffer();if(!body?.includes(Buffer.from('real-test.png')))throw Error('Missing actual uploaded file');await route.fulfill({status:202,json:{id:'test-job',status:'queued',progress:0,stage:'Ожидание',report:null,error:null}})});
 await page.route('**/api/analyses/test-job',route=>{polls++;return route.fulfill({json:polls===1?{id:'test-job',status:'processing',progress:45,stage:'Анализ кадров',report:null,error:null}:{id:'test-job',status:'completed',progress:100,stage:'Готово',report,error:null}})});
