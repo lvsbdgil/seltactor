@@ -1,0 +1,3 @@
+seltavir.alexanderlych.ru {
+    reverse_proxy seltavir-web:80
+}

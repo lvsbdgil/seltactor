@@ -34,7 +34,7 @@ JOB_TTL = 3600
 limits = {"max_files": MAX_FILES, "max_file_bytes": MAX_FILE_BYTES, "max_photo_bytes": MAX_PHOTO_BYTES,
           "max_total_bytes": MAX_TOTAL_BYTES, "max_images": MAX_IMAGES, "frames_per_video": FRAMES_PER_VIDEO}
 app = FastAPI(title="SELTACTOR analysis API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+app.add_middleware(CORSMiddleware, allow_origins=auth.allowed_origins(),
                    allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 app.include_router(auth.router)
 

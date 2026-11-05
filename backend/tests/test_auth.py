@@ -101,3 +101,15 @@ def test_hash_and_unconfigured_admin(monkeypatch):
     monkeypatch.delenv('ADMIN_PASSWORD_HASH')
     with TestClient(api.app) as client:
         assert client.post('/api/auth/login', json={'username': 'admin', 'password': PASSWORD}).status_code == 401
+
+
+def test_production_origin_and_secure_cookie(monkeypatch):
+    monkeypatch.setenv('ALLOWED_ORIGINS', 'https://seltavir.alexanderlych.ru')
+    monkeypatch.setenv('COOKIE_SECURE', 'true')
+    with TestClient(api.app, base_url='https://seltavir.alexanderlych.ru') as client:
+        denied = client.post('/api/auth/login', headers={'Origin': 'https://other.example'}, json={'username': 'admin', 'password': PASSWORD})
+        assert denied.status_code == 403
+        response = client.post('/api/auth/login', headers={'Origin': 'https://seltavir.alexanderlych.ru'}, json={'username': 'admin', 'password': PASSWORD})
+        assert response.status_code == 200
+        assert '; secure' in response.headers['set-cookie'].lower()
+        assert client.get('/api/auth/me').json()['is_admin'] is True

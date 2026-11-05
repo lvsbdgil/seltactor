@@ -1,0 +1,6 @@
+import {buildReportPdf} from '../src/pdfReport.ts';
+import {PDFDocument} from 'pdf-lib';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+mkdirSync('test-results',{recursive:true});
+const report={title:'Проверка многостраничного отчёта',mode:'openai',field:'Поле № 12 · Северное',crop:'Озимая пшеница',date:'2026-05-18',summary:'Проверка кириллицы и автоматических переносов текста.',observations:Array.from({length:12},(_,i)=>({label:'Наблюдение '+(i+1),description:('На снимке видны неоднородные участки растительности, требующие проверки агрономом. ').repeat(7),recommendation:'Провести наземный осмотр и сопоставить его результаты с материалами обследования.',source:'кадр_поля_'+('длинное_имя_'.repeat(12))+'.jpg',severity:'medium'})),limitations:['Это тестовый документ, агрономическая диагностика не выполнялась.'],disclaimer:'Решение принимает агроном.'};
+const bytes=await buildReportPdf(report,readFileSync('public/fonts/font-0.woff2'),readFileSync('public/fonts/font-3.woff2'));const pdf=await PDFDocument.load(bytes);if(pdf.getPageCount()<3)throw Error('Long report did not paginate');writeFileSync('test-results/long-report.pdf',bytes);console.log('PASS PDF: Cyrillic font embedding, 12 long observations, long filenames, '+pdf.getPageCount()+' A4 pages.');

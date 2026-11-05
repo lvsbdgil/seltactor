@@ -50,10 +50,15 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
 
 
+def allowed_origins() -> list[str]:
+    configured = os.environ.get("ALLOWED_ORIGINS")
+    return [origin.strip() for origin in configured.split(",") if origin.strip()] if configured is not None else sorted(ALLOWED_ORIGINS)
+
+
 def check_origin(request: Request) -> None:
     # CLI clients may omit Origin. Browser mutations must originate from our local UI.
     origin = request.headers.get("origin")
-    if origin and origin not in ALLOWED_ORIGINS:
+    if origin and origin not in allowed_origins():
         raise HTTPException(403, "Запрос с этого сайта запрещён.")
 
 

@@ -1,0 +1,51 @@
+name: seltavir
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+      args:
+        BASE_IMAGE: tiangolo/uvicorn-gunicorn-fastapi:python3.11-slim
+    image: seltavir-api:local
+    container_name: seltavir-api
+    restart: unless-stopped
+    env_file: ../.env.production
+    environment:
+      COOKIE_SECURE: 'true'
+      ALLOWED_ORIGINS: 'https://seltavir.alexanderlych.ru'
+    networks: [proxy]
+    mem_limit: 1g
+    cpus: 1.5
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    image: seltavir-web:local
+    container_name: seltavir-web
+    restart: unless-stopped
+    networks: [proxy]
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}
+networks:
+  proxy:
+    external: true

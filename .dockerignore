@@ -1,0 +1,10 @@
+**
+!backend/
+!backend/*.py
+!backend/requirements.lock
+!deploy/
+!deploy/Dockerfile.api
+!deploy/Dockerfile.web
+!deploy/Caddyfile.web
+!dist/
+!dist/**

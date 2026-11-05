@@ -19,12 +19,12 @@ await page.getByText('РЕЗУЛЬТАТ АНАЛИЗА СЪЁМКИ',{exact:tru
 await page.getByText(report.summary,{exact:true}).waitFor();
 if(await page.getByText('ДЕМОНСТРАЦИОННЫЙ ОТЧЁТ',{exact:true}).count())throw Error('Demo shown for real response');
 mkdirSync('test-results',{recursive:true});
-const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать отчёт',exact:true}).click();const d=await pending;await d.saveAs('test-results/report.json');const saved=JSON.parse(readFileSync('test-results/report.json','utf8'));if(saved.summary!==report.summary)throw Error('Report mismatch');
+const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать PDF-отчёт',exact:true}).click();const d=await pending;await d.saveAs('test-results/analysis-report.pdf');const saved=readFileSync('test-results/analysis-report.pdf');if(saved.subarray(0,5).toString()!=='%PDF-')throw Error('Expected PDF signature');
 await page.screenshot({path:'screenshots/rost-real-report-desktop.png',fullPage:true});
 await page.setViewportSize({width:375,height:850});await page.screenshot({path:'screenshots/rost-real-report-mobile.png',fullPage:true});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Report overflows');
 await page.getByRole('button',{name:'Новое обследование',exact:true}).last().click();
 await page.route('**/api/analyses',route=>route.fulfill({status:503,json:{detail:'Сервис анализа не настроен. Добавьте серверный ключ OpenAI.'}}));
 await page.locator('input[type=file]').setInputFiles({name:'real-test.png',mimeType:'image/png',buffer:Buffer.from('test')});await page.getByRole('button',{name:'Продолжить',exact:true}).click();await page.getByRole('button',{name:'Анализировать материалы',exact:true}).click();await page.getByRole('alert').filter({hasText:'Сервис анализа не настроен'}).waitFor();
 if(errors.length)throw Error(errors.join('\n'));
-console.log('PASS: multipart upload, job polling, real report rendering (mocked OpenAI result), JSON export, mobile layout, configuration error. No paid API requests.');
+console.log('PASS: multipart upload, job polling, real report rendering (mocked OpenAI result), PDF export, mobile layout, configuration error. No paid API requests.');
 await browser.close();

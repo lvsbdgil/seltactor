@@ -1,0 +1,21 @@
+:80 {
+    root * /srv
+    encode zstd gzip
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    handle /api/* {
+        request_body {
+            max_size 5GB
+        }
+        reverse_proxy seltavir-api:8000
+    }
+    handle {
+        @private path /key /backend/* /.env* /.git/* /admin-credentials.txt
+        respond @private 404
+        try_files {path} /index.html
+        file_server
+    }
+}
